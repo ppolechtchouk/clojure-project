@@ -1,3 +1,20 @@
+;; clojure-project.el --- project manager for swank-clojure
+;;
+;; Copyright (C) 2010 Pavel Polechtchouk
+;;
+;; Author: Pavel Polechtchouk <pavel.overseas@hotmail.com>
+;;
+;; URL: http://github.com/ppolechtchouk/clojure-project
+;; Version: 0.9.0
+;; Keywords: languages, lisp
+;;
+;; This file is licensed under the terms of the GNU General Public
+;; License as distributed with Emacs (press C-h C-c to view it).
+;;
+;;; Commentary:
+;; Version history:
+;; 0.9.0 Adapted to swank-clojure 1.6
+
 (require 'slime)
 (require 'swank-clojure)
 
@@ -11,54 +28,61 @@
 (defvar clojure-project-open-after-creating-package-p t
 "If not nil open the clojure file once you create it with 'clojure-project-creat-package'")
 
+(defvar clojure-project-use-swank-clojure-jars-p t
+"If set to t , when 'clojure-project-open' is called, it will automatically load all the swank-clojure jars.
+Otherwise, the swank-clojure and clojure jars must be in the lib directory.")
+
+(defvar clojure-project-set-compil-dir-p nil
+"If t , sets the clojure.compile.path parameter to classes directory")
+
 (defvar clojure-project-buffer-name "*Clojure Projects*")
 
-(defvar clojure-project-global-clojure-jar "~/.clojure/clojure.jar"
-"Path to clojure.jar that will be used for all Clojure projects")
+(defun clojure-project-use-swank-jars ()
+; project-dir would be set when this is called
+    (setq swank-clojure-classpath 
+        (append swank-clojure-classpath
+            (swank-clojure-default-classpath))))
+ 
+;; TODO. needs checking if classes will compile automatically 
+(defun clojure-project-set-compil-path ()
+; project-dir would be set when this is called
+    (if (boundp 'swank-clojure-extra-vm-args)
+            (add-to-list 'swank-clojure-extra-vm-args
+                     (format "-Dclojure.compile.path=%s"
+                             (expand-file-name "classes/" project-dir)))
+            (setq swank-clojure-extra-vm-args
+                (list  (format "-Dclojure.compile.path=%s"
+                           (expand-file-name "classes/" project-dir))))))
 
 (defun clojure-project-open ()
   (interactive)
   (let ((project)
-	(project-dir))
+        (project-dir)
+       )         
     (clojure-project-show-projects) ;show a list of existing projects  
     (setq project
-	(completing-read "Project name? " (clojure-project-list)))
+    (completing-read "Project name? " (clojure-project-list)))
     (setq project-dir (clojure-project-dir project))  
     (if (not (clojure-project-structure-p project-dir))
-	(error "Not a valid clojure project"))
-    (setq swank-clojure-jar-path clojure-project-global-clojure-jar)
+      (error "Not a valid clojure project"))
 
-    (if (boundp 'swank-clojure-extra-vm-args)
-        (add-to-list 'swank-clojure-extra-vm-args
-                     (format "-Dclojure.compile.path=%s"
-                             (expand-file-name "target/classes/" project-dir)))
-      (setq swank-clojure-extra-vm-args
-            (list  (format "-Dclojure.compile.path=%s"
-                           (expand-file-name "target/classes/" project-dir)))))
-    (setq swank-clojure-extra-classpaths
-       (append (mapcar (lambda (d) (expand-file-name d project-dir))
-                        '("src/" "target/classes/" "test/" "lib/"))
-	       (when (file-directory-p "~/.clojure")
-		 (directory-files "~/.clojure" t ".jar$"))))
     (setq clojure-project project); set currently opened project
     (clojure-project-show-projects);update project list
-    )
-; Configure slime clojure start command
-  (setq slime-lisp-implementations
-	(cons `(clojure ,(swank-clojure-cmd) :init swank-clojure-init)
-	      (remove-if #'(lambda (x) (eq (car x) 'clojure ))
-		slime-lisp-implementations)))
-; Kill all slime processes and start a new one
-   (save-window-excursion
-     (slime-repl-sayoonara); kill all slime buffers
-     (slime)))
+    (message (format "Starting clojure project %s" project))
+    
+; Set up all hooks
+    (if clojure-project-use-swank-clojure-jars-p
+        (add-hook 'swank-clojure-project-hook 'clojure-project-use-swank-jars))
+
+; Start slime
+    (swank-clojure-project project-dir)))
 
 (defun clojure-project-structure-p (root-dir)
   "Returns t if directory structure under root-dir conforms to a clojure project layout"
  (and
   (file-directory-p root-dir)
   (file-directory-p (concat root-dir "/src"))
-  (file-directory-p (concat root-dir "/target/classes"))
+  (file-directory-p (concat root-dir "/classes"))
   (file-directory-p (concat root-dir "/test"))
   (file-directory-p (concat root-dir "/lib"))))
 
@@ -81,8 +105,7 @@
 	 (propertize (expand-file-name dir) 'face 'bold)))
     (make-directory dir)
     (make-directory (concat dir "/src"))
-    (make-directory (concat dir "/target"))
-    (make-directory (concat dir "/target/classes"))
+    (make-directory (concat dir "/classes"))
     (make-directory (concat dir "/test"))
     (make-directory (concat dir "/lib"))
     (clojure-project-show-projects) ;show an updated list of existing projects
