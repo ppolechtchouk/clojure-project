@@ -67,7 +67,7 @@ Otherwise, the swank-clojure and clojure jars must be in the lib directory.")
       (error "Not a valid clojure project"))
 
     (setq clojure-project project); set currently opened project
-    (clojure-project-show-projects);update project list
+    (clojure-project-show-packages); update clojure project buffer
     (message (format "Starting clojure project %s" project))
     
 ; Set up all hooks
